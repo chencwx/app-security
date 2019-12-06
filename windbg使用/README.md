@@ -1,10 +1,11 @@
 # windbg使用实验
 
++ Windbg是在windows平台下，强大的用户态和内核态调试工具。相比较于Visual Studio，它是一个轻量级的调试工具
 + 安装winfbg，并查看其版本，最好与可执行程序版本一致
 
-  ![](./image/windbg版本.png)
+![](./image/windbg版本.png)
 
-  ![](./image/版本号.png)
+![](./image/版本号.png)
 
 + 在vs中写代码时，选择多线程调试（MTD模式）
 
