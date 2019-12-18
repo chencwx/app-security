@@ -1,6 +1,27 @@
 # 程序注入
 
-## [Taking a Snapshot and Viewing Processes](https://docs.microsoft.com/zh-cn/windows/win32/toolhelp/taking-a-snapshot-and-viewing-processes)的学习
+## 实验目的
+
++ 通过对代码执行过程的学习来创建dll并调用文件，完成初步的程序注入
+
+##  实验要求
+
+- [x] 综合使用源代码的遍历进程结合dumpbin和process explore进行查看可执行程序依赖的动态库，把三种结果进行比较，在经过下面`Taking a Snapshot and Viewing Processes`和`动态链接库`的实验步骤以后，得出以下的最终结果的图，发现三种工具得出的结果大约一致相同
+
+  ![](./image/三种.png)
+
+- [x] 会编写dll,把.c文件变为obj文件，把obj文件和lib文件链接为新的dll和lib文件，注意使用def文件定义导出函数（在下面的`手动创建并调用dll文件`中已经完成
+- [x] 编写一个.exe，调用第一步生成的dll文件中的导出函数。(也是在`手动创建并调用dll`文件中完成）方法是
+
+  + link是，将第一步生成的lib文件作为输入文件
+  + 保证dll文件和exe文件放在同一个目录，或者dll文件在系统目录
+- [ ] 上一步调用方式称为load time，特点是exe文件导入表中会出现需要调用的dll文件名及函数名，并且在link生成Exe时，需明确输入lib文件；还有一种调用方式称为run time.参考官方文档，使用run time 的方式，调用dll的导出函数。包括系统API和第一步自行生成的dll,都能成功调用
+
+
+
+## 实验过程
+
+### Taking a Snapshot and Viewing Processes的学习
 
 + 操作系统内部包含了三个API，呈列表结构
 
@@ -389,7 +410,18 @@
 
 + 同时，也可以打开vs开发者工具输入`dumpbin`查看调用的模块，发现API都在dll模块中，程序执行过程：进程遍历--进程模块的遍历--线程的遍历，而软件模块注入就是向程序中注入一个恶意的模块
 
-## 动态链接库
++ 通过下载[process manager](https://docs.microsoft.com/en-us/sysinternals/)，这就是上述`程序遍历`代码的执行的UI界面，从而对比各种工具得到以下的结果图
+
+  ![](./image/pe.png)
+
+  ![](./image/三种.png)
+
++ 通过上述观察得出以下的调用关系，而攻击者容易进行攻击的就是最底层的dll库
+
+  ![](./image/调用关系.png)
+  
+
+### 动态链接库
 
 + [参考代码](https://docs.microsoft.com/en-us/previous-versions/visualstudio/visual-studio-2008/1ez7dh12(v=vs.90))
 
@@ -442,7 +474,7 @@
   
   
 
-## 手动创建dll文件
+### 创建并在load time调用dll文件
 
 + [模块定义](https://docs.microsoft.com/en-us/cpp/build/reference/module-definition-dot-def-files?view=vs-201)
 
@@ -466,14 +498,11 @@
 + 新建一个`exp.def`
 
   ```c++
-  
   LIBRARY baselib
-  
-  
   EXPORTS
       lib_function
   ```
-
+  
 + 开发者工具进入源代码的目录，并对刚刚的base.c进行编译链接
 
   ![](./image/链接出错.png)
@@ -498,28 +527,18 @@
   ```
   
 + 进行编译并链接`cl.exe /c app.c`进行编译以及`link app.obj +baselib.dll /dll /out:app.exe`进行链接，之后成功，并使用dumpbin能查看到baselib.dll的存在
-  
-+ .exe-->dll有两种方式
-  
+
+
+
+### run time调用dll
+
++ 我们需要知道的是.exe-->（调用）dll有两种方式，上面调用的方式是load time，
   + load time
     + link lib
     + imports table
   + run time 
-    + 指针
+  + 指针
   
-  
-
-### 作业
-
-+ 会编写dll,把.c文件变为obj文件，把obj文件和lib文件链接为新的dll和lib文件，注意使用def文件定义导出函数
-
-+ 编写一个.exe，调用第一步生成的dll文件中的导出函数。方法是
-
-  + link是，将第一步生成的lib文件作为输入文件
-  + 保证dll文件和exe文件放在同一个目录，或者dll文件在系统目录
-
-+ 第二步调用方式称为load time 特点是exe文件导入表中会出现需要调用的dll文件名及函数名，并且在link生成Exe时，需明确输入lib文件，还有一种调用方式成为run time.参考上面的链接，使用run time 的方式，调用dll的导出函数。包括系统API和第一步自行生成的dll,都能成功调用。[参考资料](https://docs.microsoft.com/zh-cn/windows/win32/dlls/using-run-time-dynamic-linking)
-
 + 参考命令
 
   ```bash
@@ -529,18 +548,102 @@
   dumpbin /imports xxx.exe  #查看引用的模块
   ```
 
++ 新建一个工程，执行如下代码
+
+  ```c++
+  // A simple program that uses LoadLibrary and 
+  // GetProcAddress to access myPuts from Myputs.dll. 
+   
+  #include <windows.h> 
+  #include <stdio.h> 
+   
+  typedef int (__cdecl *MYPROC)(LPWSTR); 
+   
+  int main( void ) 
+  { 
+      HINSTANCE hinstLib; 
+      MYPROC ProcAdd; 
+      BOOL fFreeResult, fRunTimeLinkSuccess = FALSE; 
+   
+      // Get a handle to the DLL module.
+   
+      hinstLib = LoadLibrary(TEXT("MyPuts.dll")); 
+   
+      // If the handle is valid, try to get the function address.
+   
+      if (hinstLib != NULL) 
+      { 
+          ProcAdd = (MYPROC) GetProcAddress(hinstLib, "myPuts"); 
+   
+          // If the function address is valid, call the function.
+   
+          if (NULL != ProcAdd) 
+          {
+              fRunTimeLinkSuccess = TRUE;
+              (ProcAdd) (L"Message sent to the DLL function\n"); 
+          }
+          // Free the DLL module.
+   
+          fFreeResult = FreeLibrary(hinstLib); 
+      } 
+  
+      // If unable to call the DLL function, use an alternative.
+      if (! fRunTimeLinkSuccess) 
+          printf("Message printed from executable\n"); 
+  
+      return 0;
+  
+  }
+  ```
+
++ 上面的示例使用[**LoadLibrary**](https://msdn.microsoft.com/library/ms684175(v=VS.85).aspx)函数获取Myputs DLL的句柄（请参阅[创建简单的动态链接库](https://docs.microsoft.com/zh-cn/windows/win32/dlls/creating-a-simple-dynamic-link-library)）。如果**LoadLibrary**成功，则程序将使用[**GetProcAddress**](https://msdn.microsoft.com/library/ms683212(v=VS.85).aspx)函数中返回的句柄来获取DLL的myPuts函数的地址。调用DLL函数后，程序将调用[**FreeLibrary**](https://msdn.microsoft.com/library/ms683152(v=VS.85).aspx)函数以卸载DLL。
+
++ 因为该程序使用运行时动态链接，所以不必将模块与DLL的导入库链接。
+
++ 此示例说明了运行时动态链接和加载时动态链接之间的重要区别。如果DLL不可用，则使用加载时动态链接的应用程序必须简单地终止。但是，运行时动态链接示例可以响应该错误。
+
++ 即在创建dll库之前，我们就执行该段代码，会发现程序可以进行正常执行，只不过会报`Message printed from executable`，这说明运行时链接可以编译通过并且执行，及时响应错误，而不会像加载时链接一样，运行不成功
+
+  ![](./image/dlll.png)
+
++ 接着，使用上面实验的方法创建一个`Myputd.dll`库
+
+  ```bash
+  cl.exe /c Myputs.c#编译
+  link Myputs.obj /out:vase.dll /dll #创建dll库
+  ```
+
+  ![](./image/编译链接.png)
+
++ 查看文件目录`dir`
+
+  ![](./image/建动态库.png)
+
++ 接着重新执行刚刚的文件，会发现执行成功，且不再报刚刚的信息，而是报成功的信息`Message sent to the DLL function`
+
+  ![](./image/dlll.png)
+  
++ 由此可以看出，运行时动态链接和加载时动态链接最大的区别就是，没有dll的存在，运行时链接可以进行响应，不会影响其正常运行，只是无法达到效果，而加载时动态链接则是运行不成功，终止，因为链接时出错了
+  
   
 
-  
+## 实验总结
 
-## 实验
++ 运行时动态链接和加载时动态链接之间的重要区别。如果DLL不可用，则使用加载时动态链接的应用程序必须简单地终止。但是，运行时动态链接示例可以响应该错误。
 
-+ 综合使用源代码的遍历进程结合dumpbin和process explore进行查看可执行程序依赖的动态库，把三种结果进行比较
++ 程序注入一般的对象是dll库，修改并注入，则可以达到攻击者预想的效果
 
-+ 通过上述观察得出以下的调用关系，而攻击者进行攻击的就是最底层的dll库
++ 程序执行的调用关系如下，而攻击者容易进行攻击的就是最底层的dll库
 
   ![](./image/调用关系.png)
 
-+ 下载[process manager](https://docs.microsoft.com/en-us/sysinternals/)，这就是上述代码的执行的UI界面
 
-  ![](./image/pe.png)
+
+
+
+## 实验参考资料
+
++ [process explore使用](https://blog.csdn.net/yasi_xi/article/details/39295843)
++ [view process msdn](https://docs.microsoft.com/zh-cn/windows/win32/toolhelp/taking-a-snapshot-and-viewing-processes)
++ [dynamic link](https://docs.microsoft.com/zh-cn/windows/win32/dlls/using-run-time-dynamic-linking)
+
